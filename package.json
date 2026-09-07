@@ -1,0 +1,14 @@
+{
+  "name": "ashare-signal-pro-v3",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "gen-vapid": "web-push generate-vapid-keys"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "web-push": "^3.6.7"
+  }
+}

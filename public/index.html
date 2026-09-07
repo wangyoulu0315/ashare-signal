@@ -1,0 +1,81 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220"><link rel="manifest" href="/manifest.webmanifest"><title>A股盯盘助手 Pro</title>
+<style>
+:root{--bg:#0b1220;--card:#131d30;--card2:#19253c;--text:#f8fafc;--muted:#94a3b8;--line:#2a3a58;--blue:#2563eb}
+*{box-sizing:border-box}body{margin:0;background:#0b1220;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.app{max-width:760px;margin:auto;padding:calc(12px + env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom))}
+h1{font-size:21px;margin:4px 0}.sub,.hint{color:var(--muted);font-size:12px;line-height:1.55}.bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+button{border:0;border-radius:13px;padding:12px;font-weight:700;font-size:14px}.p{background:#2563eb;color:white}.g{background:#1f2937;color:#e5e7eb}.danger{background:#3a1820;color:#fecaca}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;margin:12px 0;padding:14px}.head{display:flex;justify-content:space-between;gap:8px}.name{font-weight:800;font-size:18px}.code{color:var(--muted);font-size:12px}
+.pill{border-radius:999px;padding:6px 9px;font-size:12px;font-weight:800;height:max-content}.bull{background:#123421;color:#86efac}.risk{background:#3a1820;color:#fca5a5}.hold{background:#172e50;color:#93c5fd}.watch{background:#3a2d10;color:#fde68a}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.m{background:var(--card2);border-radius:12px;padding:9px}.m span{font-size:11px;color:var(--muted);display:block}.m b{font-size:15px;display:block;margin-top:3px}
+.up{color:#f87171}.down{color:#4ade80}.sig{border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:13px;line-height:1.6}
+input{width:100%;background:#111827;color:white;border:1px solid #334155;border-radius:11px;padding:11px;font-size:16px}.form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{display:block;color:var(--muted);font-size:11px;margin:8px 0 4px}.actions{display:flex;gap:8px;margin-top:10px}.actions button{flex:1}
+.status{background:#101a2d;border:1px solid #23395e;padding:10px 12px;border-radius:13px;font-size:12px;color:#cbd5e1;line-height:1.5}
+@media(max-width:390px){.grid{grid-template-columns:1fr 1fr}}
+</style></head><body><div class="app">
+<h1>A股短线盯盘助手 Pro</h1>
+<div class="sub">服务器后台盯盘 · 手机推送 · 买卖价位提醒 · 不自动下单</div>
+<div class="status" id="status">正在初始化…</div>
+<div class="bar"><button class="p" onclick="refreshAll()">↻ 刷新全部</button><button class="g" onclick="enablePush()">🔔 开启通知</button></div>
+<div class="card">
+<div style="font-weight:800;margin-bottom:5px">添加股票</div>
+<div class="form">
+<div><label>名称</label><input id="name" placeholder="华工科技"></div>
+<div><label>代码</label><input id="code" placeholder="000988"></div>
+<div><label>持仓股数</label><input id="shares" type="number" placeholder="100"></div>
+<div><label>成本价</label><input id="cost" type="number" step=".001" placeholder="99.228"></div>
+<div><label>关注买点 ≤</label><input id="buyBelow" type="number" step=".001" placeholder="可不填"></div>
+<div><label>止盈观察 ≥</label><input id="sellAbove" type="number" step=".001" placeholder="可不填"></div>
+<div><label>风险位 ≤</label><input id="stopBelow" type="number" step=".001" placeholder="可不填"></div>
+</div>
+<div class="actions"><button class="p" onclick="add()">保存并开始盯盘</button></div>
+</div>
+<div id="cards"></div>
+<div class="hint">iPhone：部署到 HTTPS 后，用 Safari 打开并“添加到主屏幕”，再点击“开启通知”。iOS 需主屏幕 Web App 才能接收 Web Push。公开行情源可能存在延迟或接口变化。</div>
+</div>
+<script>
+let list=JSON.parse(localStorage.getItem("watch_v3")||"null")||[
+{name:"华工科技",code:"000988",shares:100,cost:99.228,buyBelow:"",sellAbove:"",stopBelow:""}
+];
+function cls(s){return s==="偏多"?"bull":s==="风险"?"risk":s==="持有"?"hold":"watch"}
+async function sync(){localStorage.setItem("watch_v3",JSON.stringify(list));await fetch("/api/watchlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(list)})}
+async function add(){
+ const o={};["name","code","shares","cost","buyBelow","sellAbove","stopBelow"].forEach(k=>o[k]=document.getElementById(k).value.trim());
+ if(!/^\d{6}$/.test(o.code)){alert("请输入6位A股代码");return}
+ o.shares=Number(o.shares||0);o.cost=Number(o.cost||0);o.name=o.name||o.code;
+ const i=list.findIndex(x=>x.code===o.code);if(i>=0)list[i]=o;else list.unshift(o);
+ await sync();await refreshAll();
+}
+async function del(i){list.splice(i,1);await sync();render([])}
+async function refreshAll(){
+ document.getElementById("status").textContent="正在获取行情…";
+ const out=[];
+ for(const s of list){try{const r=await fetch("/api/quote/"+s.code);const q=await r.json();out.push({...s,...q})}catch{}}
+ render(out);document.getElementById("status").textContent=new Date().toLocaleTimeString("zh-CN",{hour12:false})+" 已刷新；服务器会在交易时段每60秒后台检查。";
+}
+function render(data){
+ const map=Object.fromEntries(data.map(x=>[x.code,x]));
+ document.getElementById("cards").innerHTML=list.map((s,i)=>{
+  const q=map[s.code]||s;const gain=q.price&&s.cost?100*(q.price/s.cost-1):0;
+  return `<div class="card"><div class="head"><div><div class="name">${s.name}</div><div class="code">${s.code}</div></div><div class="pill ${cls(q.signal)}">${q.signal||"待刷新"}</div></div>
+  <div class="grid"><div class="m"><span>现价</span><b>${q.price?Number(q.price).toFixed(2):"-"}</b></div><div class="m"><span>今日</span><b class="${q.pct>=0?"up":"down"}">${q.pct!=null?(q.pct>=0?"+":"")+Number(q.pct).toFixed(2)+"%":"-"}</b></div><div class="m"><span>持仓盈亏</span><b class="${gain>=0?"up":"down"}">${q.price?(gain>=0?"+":"")+gain.toFixed(2)+"%":"-"}</b></div>
+  <div class="m"><span>MA5</span><b>${q.ma5?Number(q.ma5).toFixed(2):"-"}</b></div><div class="m"><span>MA10</span><b>${q.ma10?Number(q.ma10).toFixed(2):"-"}</b></div><div class="m"><span>RSI</span><b>${q.rsi?Number(q.rsi).toFixed(1):"-"}</b></div></div>
+  <div class="sig">${q.reasons?.join(" · ")||"等待行情"}<br><span class="hint">买点≤${s.buyBelow||"-"}　止盈≥${s.sellAbove||"-"}　风险≤${s.stopBelow||"-"}</span></div>
+  <div class="actions"><button class="danger" onclick="del(${i})">删除</button></div></div>`
+ }).join("")
+}
+function b64(s){const p="=".repeat((4-s.length%4)%4);const b=(s+p).replace(/-/g,"+").replace(/_/g,"/");const r=atob(b);return Uint8Array.from([...r].map(c=>c.charCodeAt(0)))}
+async function enablePush(){
+ if(!("serviceWorker"in navigator)||!("PushManager"in window)){alert("当前浏览器不支持推送");return}
+ const reg=await navigator.serviceWorker.register("/sw.js");
+ const perm=await Notification.requestPermission();if(perm!=="granted"){alert("需要允许通知");return}
+ const k=await (await fetch("/api/vapid-public")).json();if(!k.key){alert("服务器尚未配置 VAPID 推送密钥");return}
+ let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(k.key)});
+ await fetch("/api/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sub)});
+ document.getElementById("status").textContent="通知已开启。符合条件时会推送到手机。";
+}
+sync().then(refreshAll);
+</script></body></html>

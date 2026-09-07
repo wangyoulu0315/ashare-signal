@@ -1,0 +1,9 @@
+{
+  "name": "A股短线盯盘助手 Pro",
+  "short_name": "A股盯盘",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": []
+}
